@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iOS 17 音频播放器（带进度条）</title>
+    <style>
+        /* ========== 基础样式 ========== */
+        #audio-container {
+            max-width: 100%;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        /* 原生音频控件样式 */
+        audio {
+            width: 100%;
+            min-height: 40px;
+        }
+        
+        /* ========== 自定义进度条 ========== */
+        .progress-container {
+            width: 100%;
+            margin: 15px 0;
+            display: none; /* 默认隐藏，仅作备用 */
+        }
+        
+        progress {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        /* ========== 自定义控制按钮 ========== */
+        .custom-controls {
+            display: none; /* 默认隐藏 */
+            margin-top: 10px;
+        }
+        
+        .control-btn {
+            padding: 8px 15px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="audio-container">
+        <!-- 主音频播放器 -->
+        <audio id="audio-player" controls playsinline webkit-playsinline preload="metadata">
+            <source src="your-audio.mp3" type="audio/mpeg">
+            您的浏览器不支持 audio 元素。
+        </audio>
+        
+        <!-- 自定义进度条（备用） -->
+        <!-- <div class="progress-container" id="progress-container">
+            <progress id="custom-progress" value="0" max="100"></progress>
+            <div id="time-display">0:00 / 0:00</div>
+        </div> -->
+        
+        <!-- 自定义控制按钮（备用） -->
+        <!-- <div class="custom-controls" id="custom-controls">
+            <button class="control-btn" id="play-btn">播放</button>
+            <button class="control-btn" id="pause-btn">暂停</button>
+        </div> -->
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // ========== 元素引用 ==========
+            const audio = document.getElementById('audio-player');
+            
+            // ========== 状态变量 ==========
+            let isCustomUI = false;
+            let fallbackTimer = null;
+            
+            // ========== 初始化函数 ==========
+            function initAudioPlayer() {
+                // 检测是否iOS设备
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                
+                // iOS特殊处理
+                if(isIOS) {
+                    // Hack解决iOS不显示进度条的问题
+                    audio.addEventListener('loadedmetadata', function() {
+                        if(audio.duration === Infinity || isNaN(audio.duration)) {
+                            console.log("检测到iOS无限时长问题，应用修复方案");
+                            audio.currentTime = 1e101;
+                            audio.addEventListener('timeupdate', function fixDuration() {
+                                audio.currentTime = 0;
+                                audio.removeEventListener('timeupdate', fixDuration);
+                            });
+                        }
+                    });
+                }
+                
+                // 错误处理
+                audio.addEventListener('error', handleAudioError);
+            }
+            
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            }
+            
+            function handleAudioError(e) {
+                console.error("音频错误:", audio.error);
+                alert("加载音频失败: " + getErrorDescription(audio.error.code));
+            }
+            
+            function getErrorDescription(errorCode) {
+                const errors = {
+                    1: "用户中止",
+                    2: "网络错误",
+                    3: "解码错误",
+                    4: "音频不支持"
+                };
+                return errors[errorCode] || "未知错误";
+            }
+            
+            // ========== 启动初始化 ==========
+            // iOS必须在用户交互后初始化
+            function handleUserInteraction() {
+                document.body.removeEventListener('click', handleUserInteraction);
+                document.body.removeEventListener('touchstart', handleUserInteraction);
+                initAudioPlayer();
+            }
+            
+            // 添加用户交互监听
+            document.body.addEventListener('click', handleUserInteraction);
+            document.body.addEventListener('touchstart', handleUserInteraction);
+            audio.src = 'output.m4a';
+            audio.load();
+        });
+    </script>
+</body>
+</html>
