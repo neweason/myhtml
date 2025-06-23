@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iOS 17 音频播放器（带播放清单）</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        #player-container {
+            margin-bottom: 30px;
+        }
+        
+        audio {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        
+        #playlist {
+            list-style: none;
+            padding: 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        #playlist li {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        #playlist li:last-child {
+            border-bottom: none;
+        }
+        
+        #playlist li:hover {
+            background: #f5f5f5;
+        }
+        
+        #playlist li.playing {
+            background: #e3f2fd;
+            font-weight: bold;
+        }
+        
+        .track-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h2>音频播放器</h2>
+    
+    <div id="player-container">
+        <audio id="audio-player" controls playsinline webkit-playsinline preload="metadata"></audio>
+        <div class="track-info" id="track-info"></div>
+    </div>
+    
+    <h3>播放清单</h3>
+    <ul id="playlist"></ul>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // ========== 播放清单数据 ==========
+            const playlist = [
+                {
+                    title: "歌曲1",
+                    artist: "艺术家1",
+                    src: "1.mp3"
+                },
+                {
+                    title: "歌曲2",
+                    artist: "艺术家2",
+                    src: "2.mp3"
+                }
+                // 可以继续添加更多歌曲
+            ];
+            
+            // ========== 元素引用 ==========
+            const audioPlayer = document.getElementById('audio-player');
+            const playlistElement = document.getElementById('playlist');
+            const trackInfo = document.getElementById('track-info');
+            
+            // ========== 播放状态 ==========
+            let currentTrackIndex = 0;
+            
+            // ========== 初始化函数 ==========
+            function initPlayer() {
+                // 渲染播放清单
+                renderPlaylist();
+                
+                // 加载第一首歌曲
+                loadTrack(currentTrackIndex);
+                
+                // 事件监听
+                setupEventListeners();
+            }
+            
+            function renderPlaylist() {
+                playlistElement.innerHTML = '';
+                
+                playlist.forEach((track, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = `${track.title} - ${track.artist}`;
+                    li.dataset.index = index;
+                    
+                    if(index === currentTrackIndex) {
+                        li.classList.add('playing');
+                    }
+                    
+                    li.addEventListener('click', function() {
+                        playTrack(index);
+                    });
+                    
+                    playlistElement.appendChild(li);
+                });
+            }
+            
+            function loadTrack(index) {
+                const track = playlist[index];
+                audioPlayer.src = track.src;
+                
+                // 显示当前曲目信息
+                trackInfo.textContent = `正在播放: ${track.title} - ${track.artist}`;
+                
+                // 更新高亮
+                updatePlaylistHighlight(index);
+                
+                // iOS可能需要手动加载
+                audioPlayer.load();
+            }
+            
+            function playTrack(index) {
+                if(index >= 0 && index < playlist.length) {
+                    currentTrackIndex = index;
+                    loadTrack(index);
+                    
+                    // 确保在用户交互后播放
+                    audioPlayer.play().catch(e => {
+                        console.error("播放失败:", e);
+                    });
+                }
+            }
+            
+            function updatePlaylistHighlight(index) {
+                const items = playlistElement.querySelectorAll('li');
+                items.forEach((item, i) => {
+                    if(i === index) {
+                        item.classList.add('playing');
+                    } else {
+                        item.classList.remove('playing');
+                    }
+                });
+            }
+            
+            function setupEventListeners() {
+                // 自动播放下一首
+                audioPlayer.addEventListener('ended', playNext);
+                
+                // 错误处理
+                audioPlayer.addEventListener('error', handleError);
+                
+                // iOS特殊处理：检测无限时长问题
+                audioPlayer.addEventListener('loadedmetadata', function() {
+                    if(audioPlayer.duration === Infinity || isNaN(audioPlayer.duration)) {
+                        fixIOSDurationIssue();
+                    }
+                });
+            }
+            
+            function fixIOSDurationIssue() {
+                console.log("修复iOS无限时长问题");
+                audioPlayer.currentTime = 1e101;
+                const handler = function() {
+                    audioPlayer.currentTime = 0;
+                    audioPlayer.removeEventListener('timeupdate', handler);
+                };
+                audioPlayer.addEventListener('timeupdate', handler);
+            }
+            
+            function playNext() {
+                if(currentTrackIndex < playlist.length - 1) {
+                    playTrack(currentTrackIndex + 1);
+                } else {
+                    // 循环播放
+                    playTrack(0);
+                }
+            }
+            
+            function handleError() {
+                console.error("播放错误:", audioPlayer.error);
+                trackInfo.textContent = `播放错误: ${getErrorDescription(audioPlayer.error?.code)}`;
+            }
+            
+            function getErrorDescription(errorCode) {
+                const errors = {
+                    1: "用户中止",
+                    2: "网络错误",
+                    3: "解码错误",
+                    4: "音频不支持"
+                };
+                return errors[errorCode] || "未知错误";
+            }
+            
+            // ========== 启动播放器 ==========
+            // iOS必须在用户交互后初始化
+            function handleUserInteraction() {
+                document.body.removeEventListener('click', handleUserInteraction);
+                document.body.removeEventListener('touchstart', handleUserInteraction);
+                initPlayer();
+            }
+            
+            document.body.addEventListener('click', handleUserInteraction);
+            document.body.addEventListener('touchstart', handleUserInteraction);
+        });
+    </script>
+</body>
+</html>
