@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iOS 17 音频播放器（带播放清单）</title>
+    <style>
+        /* ========== 基础样式 ========== */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* 播放器容器 */
+        #player-container {
+            margin-bottom: 30px;
+        }
+        
+        /* 原生音频控件 */
+        audio {
+            width: 100%;
+            min-height: 40px;
+            margin-bottom: 10px;
+        }
+        
+        /* ========== 播放清单样式 ========== */
+        #playlist {
+            list-style: none;
+            padding: 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        #playlist li {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        #playlist li:last-child {
+            border-bottom: none;
+        }
+        
+        #playlist li:hover {
+            background: #f5f5f5;
+        }
+        
+        #playlist li.playing {
+            background: #e3f2fd;
+            font-weight: bold;
+        }
+        
+        /* ========== 自定义进度条 ========== */
+        .progress-container {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+        }
+        
+        progress {
+            flex-grow: 1;
+            height: 6px;
+            border-radius: 3px;
+        }
+        
+        .time-display {
+            margin-left: 10px;
+            font-size: 14px;
+            color: #666;
+            min-width: 100px;
+            text-align: right;
+        }
+        
+        /* ========== 自定义控制按钮 ========== */
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .control-btn {
+            padding: 8px 15px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .control-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h2>音频播放器</h2>
+    
+    <div id="player-container">
+        <audio id="audio-player" controls playsinline webkit-playsinline preload="metadata"></audio>
+        
+        <div class="progress-container">
+            <progress id="custom-progress" value="0" max="100"></progress>
+            <div class="time-display" id="time-display">0:00 / 0:00</div>
+        </div>
+        
+        <div class="controls">
+            <button class="control-btn" id="prev-btn">上一首</button>
+            <button class="control-btn" id="play-btn">播放</button>
+            <button class="control-btn" id="pause-btn">暂停</button>
+            <button class="control-btn" id="next-btn">下一首</button>
+        </div>
+    </div>
+    
+    <h3>播放清单</h3>
+    <ul id="playlist"></ul>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // ========== 播放清单数据 ==========
+            const playlist = [
+                {
+                    title: "歌曲1",
+                    artist: "艺术家1",
+                    src: "1.mp3"
+                },
+                {
+                    title: "歌曲2",
+                    artist: "艺术家2",
+                    src: "2.mp3"
+                }
+                // 可以继续添加更多歌曲
+            ];
+            
+            // ========== 元素引用 ==========
+            const audioPlayer = document.getElementById('audio-player');
+            const playlistElement = document.getElementById('playlist');
+            const customProgress = document.getElementById('custom-progress');
+            const timeDisplay = document.getElementById('time-display');
+            const prevBtn = document.getElementById('prev-btn');
+            const playBtn = document.getElementById('play-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            const nextBtn = document.getElementById('next-btn');
+            
+            // ========== 播放状态 ==========
+            let currentTrackIndex = 0;
+            let isPlaying = false;
+            
+            // ========== 初始化函数 ==========
+            function initPlayer() {
+                // 渲染播放清单
+                renderPlaylist();
+                
+                // 加载第一首歌曲
+                loadTrack(currentTrackIndex);
+                
+                // 事件监听
+                setupEventListeners();
+            }
+            
+            function renderPlaylist() {
+                playlistElement.innerHTML = '';
+                
+                playlist.forEach((track, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = `${track.title} - ${track.artist}`;
+                    li.dataset.index = index;
+                    
+                    if(index === currentTrackIndex) {
+                        li.classList.add('playing');
+                    }
+                    
+                    li.addEventListener('click', function() {
+                        playTrack(index);
+                    });
+                    
+                    playlistElement.appendChild(li);
+                });
+            }
+            
+            function loadTrack(index) {
+                const track = playlist[index];
+                audioPlayer.src = track.src;
+                audioPlayer.load();
+                
+                // 更新UI
+                updatePlaylistHighlight(index);
+                
+                // 如果是播放状态，自动播放
+                if(isPlaying) {
+                    audioPlayer.play().catch(e => {
+                        console.error("播放失败:", e);
+                        isPlaying = false;
+                    });
+                }
+            }
+            
+            function playTrack(index) {
+                if(index >= 0 && index < playlist.length) {
+                    currentTrackIndex = index;
+                    loadTrack(index);
+                    
+                    // 确保在用户交互后播放
+                    audioPlayer.play().then(() => {
+                        isPlaying = true;
+                        updateControlButtons();
+                    }).catch(e => {
+                        console.error("播放失败:", e);
+                    });
+                }
+            }
+            
+            function updatePlaylistHighlight(index) {
+                const items = playlistElement.querySelectorAll('li');
+                items.forEach((item, i) => {
+                    if(i === index) {
+                        item.classList.add('playing');
+                    } else {
+                        item.classList.remove('playing');
+                    }
+                });
+            }
+            
+            function updateControlButtons() {
+                playBtn.disabled = isPlaying;
+                pauseBtn.disabled = !isPlaying;
+                prevBtn.disabled = currentTrackIndex === 0;
+                nextBtn.disabled = currentTrackIndex === playlist.length - 1;
+            }
+            
+            function updateProgress() {
+                if(audioPlayer.duration > 0) {
+                    const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                    customProgress.value = progress;
+                    
+                    // 更新时间显示
+                    timeDisplay.textContent = 
+                        `${formatTime(audioPlayer.currentTime)} / ${formatTime(audioPlayer.duration)}`;
+                }
+            }
+            
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            }
+            
+            function setupEventListeners() {
+                // 播放器事件
+                audioPlayer.addEventListener('timeupdate', updateProgress);
+                audioPlayer.addEventListener('ended', playNext);
+                audioPlayer.addEventListener('error', handleError);
+                
+                // iOS特殊处理：检测无限时长问题
+                audioPlayer.addEventListener('loadedmetadata', function() {
+                    if(audioPlayer.duration === Infinity || isNaN(audioPlayer.duration)) {
+                        fixIOSDurationIssue();
+                    }
+                });
+                
+                // 控制按钮事件
+                playBtn.addEventListener('click', function() {
+                    audioPlayer.play().then(() => {
+                        isPlaying = true;
+                        updateControlButtons();
+                    });
+                });
+                
+                pauseBtn.addEventListener('click', function() {
+                    audioPlayer.pause();
+                    isPlaying = false;
+                    updateControlButtons();
+                });
+                
+                prevBtn.addEventListener('click', playPrevious);
+                nextBtn.addEventListener('click', playNext);
+            }
+            
+            function fixIOSDurationIssue() {
+                console.log("修复iOS无限时长问题");
+                audioPlayer.currentTime = 1e101;
+                const handler = function() {
+                    audioPlayer.currentTime = 0;
+                    audioPlayer.removeEventListener('timeupdate', handler);
+                };
+                audioPlayer.addEventListener('timeupdate', handler);
+            }
+            
+            function playNext() {
+                if(currentTrackIndex < playlist.length - 1) {
+                    playTrack(currentTrackIndex + 1);
+                } else {
+                    // 循环播放
+                    playTrack(0);
+                }
+            }
+            
+            function playPrevious() {
+                if(currentTrackIndex > 0) {
+                    playTrack(currentTrackIndex - 1);
+                }
+            }
+            
+            function handleError() {
+                console.error("播放错误:", audioPlayer.error);
+                alert(`播放错误: ${getErrorDescription(audioPlayer.error?.code)}`);
+            }
+            
+            function getErrorDescription(errorCode) {
+                const errors = {
+                    1: "用户中止",
+                    2: "网络错误",
+                    3: "解码错误",
+                    4: "音频不支持"
+                };
+                return errors[errorCode] || "未知错误";
+            }
+            
+            // ========== 启动播放器 ==========
+            // iOS必须在用户交互后初始化
+            function handleUserInteraction() {
+                document.body.removeEventListener('click', handleUserInteraction);
+                document.body.removeEventListener('touchstart', handleUserInteraction);
+                initPlayer();
+            }
+            
+            document.body.addEventListener('click', handleUserInteraction);
+            document.body.addEventListener('touchstart', handleUserInteraction);
+        });
+    </script>
+</body>
+</html>
